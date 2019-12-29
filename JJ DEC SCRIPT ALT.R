@@ -818,16 +818,6 @@ p_load(tidyverse,
 # 
 # # Også en liste-variabel. Jeg har ikke umiddelbart brug for den. 
 # 
-# # DATA RENSET. GEMMER, ------------------------------------------------
-# 
-# dim(fb_ads) # 14190    40
-# 
-# # # Gemmer renset data
-# # write_rds(fb_ads, "FB API data/data/fb_ads.rds") # rds fordi csv ikke kan gemme lister.
-# 
-# # # Indlæser pol_ads
-# 
-fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 
 ## Efterfølgende tilføjelser =================================
 
@@ -852,3 +842,82 @@ partileder <- c("Mette Frederiksen", "Søren Pape Poulsen", "Pia Olsen Dyhr", "L
 
 # Seks dage inde i valgkampen blev Isabella Arendt fungerende formand for KD i stedet for Stig Grenov.
 # Det er også hende, der har kørt flest annoncer, så jeg medtager hende som formand for KD. 
+
+## 2. Tiløjer partibogstav og ID (29. december) =================================
+
+# fb_ads %>%
+#   count(PARTI)
+# 
+# # Udfordring: parti-sider har ikke noget parti-bogstav.
+# 
+# fb_ads <- fb_ads %>%
+#   mutate(PARTI = case_when(
+#     parti_navn == "Socialdemokratiet" ~ "A",
+#     parti_navn == "Radikale Venstre" ~ "B",
+#     parti_navn == "Konservative" ~ "C",
+#     parti_navn == "Nye Borgerlige" ~ "D",
+#     parti_navn == "Parti Klaus Riskær Pedersen" ~ "E",
+#     parti_navn == "Socialistisk Folkeparti" ~ "F",
+#     parti_navn == "Liberal Alliance" ~ "I",
+#     parti_navn == "Kristendemokraterne" ~ "K",
+#     parti_navn == "Folkebevægelsen mod EU" ~ "N",
+#     parti_navn == "Dansk Folkeparti" ~ "O",
+#     parti_navn == "Stram Kurs" ~ "P",
+#     parti_navn == "Venstre" ~ "V",
+#     parti_navn == "Enhedslisten" ~ "OE", # NB! skifter til OE og AA fordi Quanteda får ÆØÅ galt i halsen
+#     parti_navn == "Alternativet" ~ "AA"
+#   ))
+# # Alle partier har nu også parti-bogstaver i variablen 'PARTI'.
+# 
+# 
+# ###  Sorterer data i alfabetisk rækkeføge efter partibogstav og page_name ###
+# 
+# fb_ads <- fb_ads %>%
+#   arrange(PARTI, page_name)
+# 
+# # Giver hver ad et unikt id.
+# 
+# # Gammel kode: Her lod jeg page_name indgå i hver ID. Nu beholder jeg kun partinavn.
+# 
+# # fb_ads <- fb_ads %>%
+# #   group_by(page_name) %>%
+# #   mutate(ad_id = paste(PARTI,
+# #                        str_trunc(str_remove_all(page_name, "[:space:]"), 20, "center", ellipsis = "."), 
+# #                        # fjerner mellemrum og sætter max længde på page_name
+# #                        row_number(), sep = "-")) %>%
+# #   ungroup() # NB! funktionen virker ikke hvis plyr er loaded!
+# 
+# 
+# fb_ads <- fb_ads %>%
+#   mutate(ad_id = paste0(PARTI, 
+#                         #str_trunc(str_remove_all(page_name, "[:space:]"), 20, "center", ellipsis = "."), 
+#                         # fjerner mellemrum og sætter max længde på page_name
+#                         1:nrow(fb_ads)))
+# 
+# # Virker det?
+# n_distinct(fb_ads$ad_id)
+# 
+# # Virker fint.
+# fb_ads %>%
+#   select(PARTI, page_name, ad_id) %>%
+#   head() #  Alexander Grandt (A) er første kandidat i data. Thomas Anker (Å) er den sidste.
+# 
+# # Detalje: Fjerner white space i begyndelsen eller slutningen af annonceteksten for at sikre, 
+# # at distinct() ikke lader sig narre af whitespace og kun beholder tekstmæssigt unikke annoncer.
+# # TIlføj evt. til jjscript all
+# fb_ads <- fb_ads %>%
+#   mutate(ad_creative_body = str_trim(ad_creative_body),
+#          ad_id_copy = ad_id) # Nødvendig fordi ad_id forsvinder fra corpus metadata når den bruges som doc_id.
+
+# # DATA RENSET. GEMMER, ------------------------------------------------
+# 
+# dim(fb_ads) # 14190    42
+# 
+# # # Gemmer renset data
+# write_rds(fb_ads, "FB API data/data/fb_ads.rds") # rds fordi csv ikke kan gemme lister.
+# 
+# # # Indlæser fb_ads
+# 
+# fb_ads <- read_rds("FB API data/data/fb_ads.rds")
+# 
+# dim(fb_ads) # 14.190. 
