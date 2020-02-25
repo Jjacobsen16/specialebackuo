@@ -7,30 +7,30 @@ p_load(tidyverse, quanteda, xtable, tictoc, caret, readxl, estimatr, texreg, bro
 
 fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 
-# ## 1.2 Tjekker data ============================================
-# 
+## 1.2 Tjekker data ============================================
+
 # # Undersøger populationen af kandidat-annoncer med tekstmæssigt unikt indhold
 # fb_ads %>%
 #   filter(!ad_creative_body =="") %>% # sorterer 2 tekstmæssigt tomme annoncer fra
 #   # filter(kandidat_d == T) %>% # Bruger kun personlige sider, ikke parti-sider
-#   distinct(ad_creative_body) %>% # Beholder kun tekstmæssigt unikke kandidat-annoncer 
+#   distinct(ad_creative_body) %>% # Beholder kun tekstmæssigt unikke kandidat-annoncer
 #   nrow() # Det giver n=5.518. Det er denne population jeg tager en stikprøve af i udvælgelsen af training data. N=7.172 inkl. partisider.
 # 
 # # Tjekker hvor mange tekstmæssigt unikke annoncer hvert partis kandidater har kørt:
 # fb_ads %>%
-#   filter(!ad_creative_body =="") %>% 
-#   filter(kandidat_d == T) %>% 
+#   filter(!ad_creative_body =="") %>%
+#   filter(kandidat_d == T) %>%
 #   distinct(ad_creative_body, .keep_all = T) %>%
 #   group_by(PARTI) %>%
 #   count() %>%
 #   arrange(n)
 # # Det strækker sig fra 39 (Partiet Klaus Riskær Pedersen) til 1.072 (Venstre).
 # 
-# # Laver et corpus med alle annoncer i fb_ads, fuld population
-# corpus_data <- dplyr::select(fb_ads, c(ad_id, ad_id_copy, ad_creative_body, page_name, PARTI, parti_navn, KØN, ALDER, spend_mid, spend_interval, 
+# # Laver et corpus med alle annoncer i fb_ads, fuld populationo
+# corpus_data <- dplyr::select(fb_ads, c(ad_id, ad_id_copy, ad_creative_body, page_name, PARTI, parti_navn, KØN, ALDER, spend_mid, spend_interval,
 #                                        impressions_mid, impressions_interval, kandidat_d, facebook, instagram)) #pers_d)) # OBS! pers_d skal laves først. og tilføjes til fb_ads
 # 
-# corpus_body <- corpus(corpus_data, 
+# corpus_body <- corpus(corpus_data,
 #                       docid_field = "ad_id_copy", # sætter dokumentid = ad_id
 #                       text_field = "ad_creative_body")
 # 
@@ -48,7 +48,7 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # #   distinct(ad_creative_body, .keep_all = T) %>% # Medtager kun tekstmæssigt unikke annoncer
 # #   sample_n(1000) %>% # Koder 1.000 til at starte med.
 # #   pull(ad_id)
-# # 
+# #
 # # # Trækker de 1000 annoncer ud som en Excel-fil, så jeg kan kode dem manuelt.
 # # random1000 <- fb_ads %>%
 # #   filter(ad_id %in% random_id) %>%
@@ -82,7 +82,7 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # # Tjekker andelen af personaliserede annoncer i de to sæt (tjekker randomiseringen)
 # prop.table(table(docvars(training500_corpus, "selvpersonaliseret")))*100 # 31.4 pct. selvpersonaliseret
 # prop.table(table(docvars(test256_corpus, "selvpersonaliseret")))*100 # 35.9 pct. selvpersonaliseret, udmærket.
-# # randomiseringen er repliceret. 
+# # randomiseringen er repliceret.
 # 
 # # 3. TEST OG TRAINING DFM ---------------------------------
 # 
@@ -136,7 +136,7 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # # NB can only take features into consideration that occur both in the training set and the test set
 # # tilføjer derfor alle ord til en samlet dfm
 # dfm_matched256 <- dfm_match(test256_dfm, features = featnames(training500_dfm)) # OMVENDT I FORHOLD TIL DOCUMENTATION!!!
-# ndoc(dfm_matched256) # 256 rækker fra test set. 
+# ndoc(dfm_matched256) # 256 rækker fra test set.
 # nfeat(dfm_matched256) # 5492. Alle ord fra training set er inkluderet.
 # 
 # # Laver en confusion matrix for at tjekke, hvordan algoritmen klarede sig.
@@ -144,7 +144,7 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # actual_class256 <- docvars(dfm_matched256, "selvpersonaliseret") # indeholder kun de 256 fra test data
 # 
 # # Maskinens prediction af de 256 annoncer
-# predicted_class256 <- predict(NB500, newdata = dfm_matched256, force = F) # newdata = "dfm on which prediction should be made". 
+# predicted_class256 <- predict(NB500, newdata = dfm_matched256, force = F) # newdata = "dfm on which prediction should be made".
 # tab_class256 <- table(actual_class256, predicted_class256) # VIRKER KUN HVIS DE HAR SAMME LÆNGE (500 vs. 256).
 # tab_class256
 # # Resultat: 145 TRUE NEGATIVES, 42 TRUE POSITIVES, 50 FALSE NEGATIVES og 19 FALSE POSITIVES.
@@ -187,6 +187,13 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # nfeat(dfm_matched_rest) # 7065. Alle ord, som optræder i training OG test set beholder vi. Giver mening!
 # 
 # predict_nolabel <- predict(NB756, newdata = dfm_matched_rest) # virker!
+# predict_nolabel_prob <- predict(NB756, newdata = dfm_matched_rest, type = "probability") %>%
+#   round(.,3) # afrunder.
+# # Smelter dem sammen i en df
+# 
+# glimpse(predict_nolabel)
+# 
+# hist(predict_nolabel_prob)
 # 
 # 
 # Model performance test ---------------------------------------------------------
@@ -293,7 +300,7 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # 
 # # [2] 
 # set.seed(2000)
-# training604_corpus2 <- corpus(sample_n(kodet756, 604), docid_field = "ad_id_copy", # sætter dokumentid = ad_id
+# training604_corpus2 o<- corpus(sample_n(kodet756, 604), docid_field = "ad_id_copy", # sætter dokumentid = ad_id
 #                               text_field = "ad_creative_body")
 # 
 # # [3]
@@ -421,23 +428,52 @@ fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 
 
 
-# # 6. Merger resultaterne med fb data og gemmer --------------
-# # Laver en dataframe med predicted resultater.
-# predict_nolabel_df <- as.data.frame(predict_nolabel) %>%
-#   rownames_to_column("ad_id") %>% 
-#   rename(selvpersonaliseret = predict_nolabel) %>% # omdøber så den er klar til merge. 
-#   # OBS! R gemmer faktor variabel som 1 og 2. Konverterer det til 0 og 1 i neden for!
-#   mutate(selvpersonaliseret = as.numeric(selvpersonaliseret)) %>%
-#   mutate(selvpersonaliseret = case_when(selvpersonaliseret == 2 ~ 1,
-#                                         selvpersonaliseret == 1 ~ 0,
-#                                         T ~ NA_real_))
+ # 6. Merger resultaterne med fb data og gemmer --------------
+#  # Laver en dataframe med predicted resultater.
+#  predict_nolabel_df <- as.data.frame(predict_nolabel) %>%
+#    rownames_to_column("ad_id") %>% 
+#    rename(selvpersonaliseret = predict_nolabel) %>% # omdøber så den er klar til merge. 
+#    # OBS! R gemmer faktor variabel som 1 og 2. Konverterer det til 0 og 1 i neden for!
+#    mutate(selvpersonaliseret = as.numeric(selvpersonaliseret)) %>%
+#    mutate(selvpersonaliseret = case_when(selvpersonaliseret == 2 ~ 1,
+#                                          selvpersonaliseret == 1 ~ 0,
+#                                          T ~ NA_real_))
 # 
-# # Samler de to (predicted og labelled) i en df, så den kan merges med fb_ads
-# selvpersonaliseret <- bind_rows(predict_nolabel_df, select(kodet756, ad_id, selvpersonaliseret))
-# glimpse(selvpersonaliseret) # alle 14.190 annoncer. Fint!
-
-# gemmer lige selvpersonaliseret.
-# write_csv(selvpersonaliseret, "pers_predicted.csv")
+#  # Samler de to (predicted og labelled) i en df, så den kan merges med fb_ads
+#  selvpersonaliseret <- bind_rows(predict_nolabel_df, select(kodet756, ad_id, selvpersonaliseret))
+#  
+#  glimpse(selvpersonaliseret) # alle 14.190 annoncer. Fint!
+#  # 756 annoncer er NA's på probability, fordi de er kodet i hånden (trainng set).
+# # gemmer lige selvpersonaliseret.
+# #  write_csv(selvpersonaliseret, "pers_predicted.csv")
+#  
+#  ### Nyt: Tilføjer probability fra NB756 ###
+# predict_nolabel_prob <- as.data.frame(predict_nolabel_prob) %>%
+#     rownames_to_column("ad_id") %>%
+#     rename(probability = `1`)
+#   
+#   # Indsætter en kolonne med probability for de annoncer, maskinen har kodet:
+#  selvpersonaliseret_prob <- left_join(selvpersonaliseret, select(predict_nolabel_prob, ad_id, probability))
+#  
+#  # Tilføjer også annoncetekst for at få eksempler
+#  selvpersonaliseret_prob <- left_join(selvpersonaliseret_prob, select(fb_ads, ad_id, ad_creative_body))
+#  
+#  # Tjekker den ud
+#  glimpse(selvpersonaliseret_prob)
+#  
+#  selvpersonaliseret_prob %>%
+#    select(-ad_creative_body) %>%
+#    filter(!is.na(probability)) %>%
+#    arrange(probability) %>%
+#    tail()
+#  
+#  selvpersonaliseret_prob %>%
+#   filter(selvpersonaliseret == 1) %>%
+#    select(probability) %>%
+#    summary()# Alle annoncer med en probability > 0.5 er blevet labelled "selvpersonaliseret". Fint!
+ 
+ # Gemmer lige selvpersonaliseret_prob.
+# write_csv(selvpersonaliseret_prob, "pers_predicted_prob.csv")
 
 # Indlæser resultatet
 selvpersonaliseret <- read_csv("pers_predicted.csv") 
@@ -448,6 +484,7 @@ fb_ads <- fb_ads %>%
 #######################################################################
 # 7. Analyse og signifikanstest ########################################
 ########################################################################
+
 
 # Hvor mange af kandidatannoncerne er selvpersonaliserede?
 fb_ads %>% 
@@ -482,6 +519,7 @@ parti_pers_resultat <- fb_ads %>%
             n_pers = sum(selvpersonaliseret),
             share_pers = n_pers/n_ads*100) %>%
   arrange(desc(share_pers)) # VÆR SÅ GOD! Her har vi så resultatet .
+
 # Eksporter tab:selvpersonaliseret_partier
 xtable(parti_pers_resultat, digits = 1,
        auto = TRUE, type = "latex")
@@ -499,9 +537,9 @@ fb_ads %>%
 
 # Og hvis jeg ser på ad spend i stedet for number of ads?
 parti_resultat <- fb_ads %>%
-  mutate(spend_pers = selvpersonaliseret*spend_mid,
+ filter(kandidat_d == 1) %>%
+ mutate(spend_pers = selvpersonaliseret*spend_mid,
          spend_pers_min = selvpersonaliseret*spend_lower_bound) %>%
-filter(kandidat_d == 1) %>%
   group_by(parti_navn) %>%
   summarise(spend = sum(spend_mid),
             pers_spend = sum(spend_pers),
@@ -651,6 +689,11 @@ summary(lmr.centralisering.uk)
   # decentraliserede partier er UÆNDRET 35.50 
   # centraliserede partier er UÆNDRET 33.20. 
 
+# Johan to hurtige ekstratests: Bliver effekten også insignifikant, når der kun anvendes kontrolvariable,
+# og ikke clusterrobsute standardfejl?
+lm.centralisering.ak <- lm(selvpersonaliseret ~ centralisering + ALDER + KØN + EP + instagram,
+                                  data = fb_ads, subset = kandidat_d == 1, weights = spend_mid)
+summary(lm.centralisering.ak)
 ### Model 2: lm_robust for partier, med få kontrolvariable (fk) =====================================
 lmr.centralisering.fk <- lm_robust(selvpersonaliseret ~ centralisering + KØN + ALDER, clusters = PARTI, se_type = "stata",
                                    data = fb_ads, subset = kandidat_d == 1, weights = spend_mid)
@@ -685,6 +728,12 @@ summary(glm.centralisering)
 ### STATUS EFTER EN FORMIDDAGS TJEK AF DENNE FEJL - OPSUMMERERING AF DET NEDEN FOR #######################
 # I en binomial glm kan man kun bruge frekvensvægte - altså vægte, som fortæller hvor mange observationer, der har proportion of succes x.
 # Problemet er, at min Y ikke er proportion of succes mellem 0 og 1, men min Y er binær 0/1. Derfor kan jeg ikke bruge vægte med alm binomial glm.
+  # Nyt: Når jeg bruger cluster robuste standardfej (af typen "stata"), fortæller jeg R, at jeg faktisk kun har 13 (partierne) uafhængige observationer, 
+# og at meget af data dermed er overflødigt. Standard errors bliver pustet op for at reflektere dette,
+# Clyde Schnecther fra STATA anbefaler faktisk, at jeg bruger en hierarkisk model, fordi en one-level model IKKE tager højde for den hierarkiske struktur i data.
+  # Resultaterne kunne måske blive mere efficiente ved at fortælle R, at det er en hierarisk model.
+  # https://www.statalist.org/forums/forum/general-stata-discussion/general/1407698-clustering-in-logistic-regression 
+
 
 # Underligt nok viser problemet (warning) sig først, når vægten og KØN er med i modellen samtidigt.
 
@@ -774,7 +823,8 @@ fb_ads%>%
 texreg(list(lm.centralisering.0, lm.centralisering.01, lmr.centralisering.uk, lmr.centralisering.fk, lmr.centralisering.ak), 
        dcolumn = TRUE, booktabs = TRUE, use.packages = FALSE, label = "tab:pers_lin", caption = "Lineære regressionermodeller", float.pos = "hb!",
        include.rmse = F, include.ci = F, include.rsquared = F, custom.note = "En lille forklaring", stars = 0.05,
-       custom.gof.rows = list("Cluster robuste standardfejl" = c("Nej", "Nej", "Ja", "Ja", "Ja"), "Vægtet efter annoncepris" = c("Nej", "Ja","Ja", "Ja", "Ja"))
+       custom.gof.rows = list("Klyngerobust" = c("Nej", "Nej", "Ja", "Ja", "Ja"), 
+                              "Vægtet" = c("Nej", "Ja","Ja", "Ja", "Ja"))
        #model.names = c("t-test", "cluster robust", "vægtet", "få kontrolvariable", "alle kontrolvariable"))
 )
 
@@ -807,9 +857,15 @@ texreg.centralisering <- texreg(extr_centralisering, dcolumn = TRUE, booktabs = 
 
 
 # Det kunne godt tyde på en konkav sammenhæng mellem alder og personalisering?
-ggplot(fb_ads, aes(ALDER, selvpersonaliseret)) +
-  geom_point() +
-  stat_smooth(method = "lm_robust", formula = lm.centralisering) +
+fb_ads %>%
+  filter(kandidat_d == 1) %>%
+  count(ALDER) %>%
+  tail()
+
+fb_ads %>%
+  filter(kandidat_d == 1) %>%
+ggplot(aes(ALDER, selvpersonaliseret)) +
+  stat_smooth(formula = selvpersonaliseret ~ poly(ALDER,2)) +
   theme_bw()
 # OVervej poly(ALDER, 2) # OBS! missing values are not allowed in 'poly'! ikke når jeg bruger orthogonal. brug måske bare raw = T.
 
@@ -883,7 +939,7 @@ pers_vis <- fb_ads %>%
 # Ja noget i den her stil ser fint ud!
 pers_vis %>%
   filter(STEMMESEDDELNAVN %in% pull(head(kandidat_pers,30), STEMMESEDDELNAVN)) %>% # Udvælger de 30 største spenders (total)
-ggplot(aes(x = STEMMESEDDELNAVN, y = total_spend, fill = selvpersonaliseret)) + 
+ggplot(aes(x = reorder(STEMMESEDDELNAVN, total_spend), y = total_spend, fill = selvpersonaliseret)) + 
   geom_bar(position = "stack", stat = "identity") + coord_flip() + theme_minimal()
     
 
@@ -906,7 +962,7 @@ fb_ads <- fb_ads %>%
 fb_ads$PARTI
 
 # Model 0: lm uden vægt
-m0.parti <- lm(selvpersonaliseret ~ PARTI, data = fb_ads, subset = kandidat_d == 1)
+m0.parti <- lm(selvpersonaliseret ~ PARTI -1, data = fb_ads, subset = kandidat_d == 1)
 
 # Model 0.1: lm vægtet
 m01.parti <- lm(selvpersonaliseret ~ PARTI, data = fb_ads, subset = kandidat_d == 1,
@@ -951,3 +1007,98 @@ texreg(list(m0.parti, m01.parti, m1.parti, m2.parti, glm.parti),
 #  mutate(centralisering = case_when(PARTI %in% c("A", "OE", "F", "O", "I", "D") ~ 1,
 #                                    PARTI %in% c("AA", "B", "V", "C", "K", "E", "N") ~ 0,
 #                                    T ~ NA_real_))
+
+# NYT: Personalisering for kandidaterne #########################
+
+
+# Tilføjer et en grænseværdi i data: Hvorvidt andelen af annoncekroner er over eller under kandidaternes gennemsnit totalt set
+kandidater <- fb_ads %>%
+    filter(kandidat_d == 1) %>%
+    mutate(spend_pers = selvpersonaliseret*spend_mid,
+         spend_pers_min = selvpersonaliseret*spend_lower_bound) %>%
+    group_by(STEMMESEDDELNAVN, PARTI) %>%
+  summarise(spend = sum(spend_mid),
+            pers_spend = sum(spend_pers),
+            share_pers_spend = pers_spend/spend,
+            spend_min = sum(spend_lower_bound),
+            spend_pers_min2 = sum(spend_pers_min)) %>% 
+  arrange(desc(pers_spend))
+#spend_perstest = sum(selvpersonaliseret*spend_mid))
+colSums(parti_resultat[,2:6]) # Nej det kan ikke passe at de har brugt min. 3.75 mio. kroner?
+# Update: Jo, det kan det sagtens. I valgkampens sidste 4 uger brugte kandidaterne lidt over 6 mio. kroner.
+# colSums driller med scientific notation. slukker det:
+# options(scipen = 500)
+
+# Hvor meget har partiernes kandidater brugt i alt?
+kandidat_spend_by_parti <- kandidater %>%
+  group_by(PARTI) %>%
+  summarise(parti_spend = sum(spend)) %>%
+  arrange(desc(parti_spend))
+
+# tilføjer til kandidater df
+kandidater <- left_join(kandidater, kandidat_spend_by_parti)
+
+kandidater %>%  
+  mutate(farve = if_else(share_pers_spend > .345656, "Over gennemsnit", "Under gennemsnit")) %>%
+  ggplot(aes(x= PARTI, y = share_pers_spend)) +
+  geom_segment(aes( x = spend, xend = spend, y = .345656, yend = share_pers_spend, color = farve)) +
+  geom_linerange(aes(x = spend, ymin = .345656, ymax = share_pers_spend, color = farve)) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.border = element_blank(),
+  ) +
+  xlab("Totalt annonceforbrug per kandidat (DKK)") +
+  ylab("Andel kroner brugt på personaliserede annoncer") +
+  facet_wrap(~reorder(PARTI, -parti_spend)) +
+  scale_x_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+                              labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  scale_y_continuous(labels = scales::percent) 
+# Jeg kan også bruge geom_linerange() med følgende info:
+   #ggplot(aes(x= reorder(STEMMESEDDELNAVN, spend), y = share_pers_spend, ymin = .345656, ymax = share_pers_spend, group = PARTI)) +
+   #  geom_linerange(aes(x = log(spend), color = farve))
+
+#ggsave("kandidat_pers_figur.pdf", width = 7, height = 5)
+
+# Prøver lige at lave et boxlot
+kandidater %>%
+  mutate(farve = if_else(share_pers_spend > .345656, "Over gennemsnit", "Under gennemsnit")) %>%
+  ggplot(aes(x = reorder(PARTI, -parti_spend), y = spend)) + 
+  geom_boxplot(aes(colour = farve), varwidth = F) + # position = position_dodge2(preserve = "single")) + 
+  scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+                labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  # annotation_logticks(sides = "b") + virker ikke
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  coord_flip() +
+  xlab("Partibogstav") +
+  ylab("log(kandidaternes totale annonceforbrug") +
+  geom_jitter(size=0.1, alpha=0.9)
+
+# Jeg synes ikke, boxplot giver så meget mening, fordi det vægter de enkelte observationer ens, når det beregner et gennemsnit?
+# Jeg kører lige en graf uden det. 
+
+
+kandidater %>%
+  mutate(Selvpersonaliseret = if_else(share_pers_spend > .345656, "Over gennemsnit", "Under gennemsnit")) %>%
+  ggplot(aes(x = reorder(PARTI, -parti_spend), y = spend)) + 
+  geom_point((aes(colour = Selvpersonaliseret)), position = position_jitter(w = 0.2, h = 0.02), size = 3) + # position = position_dodge2(preserve = "single")) + 
+  # pas på med jitter h = fordi den rykker på prikkerne horisontalt. Giver den kun en smule jitter.
+  scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+                labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  # annotation_logticks(sides = "b") + virker ikke
+  theme_minimal() +
+  theme(legend.position = "none") +
+  coord_flip() +
+  xlab("Partibogstav") +
+  ylab("log(kandidaternes totale annonceforbrug") 
+
+#ggsave("kandidat_pers_prik.pdf", width = 7, height = 6)
+
+kandidater %>%
+  filter(PARTI == "OE") %>%
+  arrange(desc(spend))
+
+fb_ads %>%
+  filter(STEMMESEDDELNAVN == "Rosa Lund") %>%
+  select(ad_id, selvpersonaliseret, ad_creative_body)
