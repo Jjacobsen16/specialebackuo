@@ -921,3 +921,65 @@ partileder <- c("Mette Frederiksen", "Søren Pape Poulsen", "Pia Olsen Dyhr", "L
 # fb_ads <- read_rds("FB API data/data/fb_ads.rds")
 # 
 # dim(fb_ads) # 14.190. 
+
+# NYE RETTELSER TIL fb_ads slut februar -------------------------------------------------
+
+### EP ###
+glimpse(fb_ads)
+fb_ads %>%
+  filter(kandidat_d == 1 & FT == 0 & EP == 0) %>%
+  distinct(page_name, parti_navn)
+
+# Af en eller anden grund er 4 politikere kodet som hverken opstillet ved FT eller EP.
+# De var alle opstillet til EP. Retter fejlen
+
+fb_ads <- fb_ads %>%
+  mutate(EP = case_when(kandidat_d == 1 & FT == 0 & EP == 0 ~ 1,
+                        T ~ EP))
+### RETTET ###
+
+### PARTI til factor ###
+# laver PARTI om til factor, så jeg kan ændre referencekategori
+fb_ads <- fb_ads %>%
+  mutate(PARTI = as.factor(PARTI),
+         parti_navn = as.factor(parti_navn))
+
+### RETTET ###
+
+
+### STORKREDS MISSING ###
+fb_ads %>%
+  filter(kandidat_d == 1) %>%
+  count(STORKREDS) # De 1.339 annoncer kommer fra kandidater, som kun stiller op til EP og IKKE FT.
+
+# Jeg omkoder derfor STORKREDS til "Hele landet" for de 1.339 EP-kandidater.
+fb_ads <- fb_ads %>%
+  mutate(STORKREDS = case_when(kandidat_d == 1 & FT == 0 ~ "Hele landet (EP)",
+                               T ~ as.character(STORKREDS)))
+
+### RETTET ###
+
+# HV-placering tilføjes
+fb_ads <- fb_ads %>%
+  mutate(Højreorienteret = case_when(PARTI %in% c("A", "F", "OE", "B", "AA", "N") ~ 0,
+                                     PARTI %in% c("V", "C", "I", "K", "D", "E", "P", "O") ~ 1,
+                                     T ~ NA_real_)) # Klaus Riskær Parti kodes som højreorienteret. Alternativet som venstreorienteret.
+
+# Centraliseret nomineringsproces tilføjes
+fb_ads <- fb_ads %>%
+  mutate(centralisering = case_when(PARTI %in% c("A", "OE", "F", "O", "I", "D") ~ 1,
+                                    PARTI %in% c("AA", "B", "V", "C", "K", "E", "N") ~ 0,
+                                    T ~ NA_real_))
+# Sådan! Ingen missing values på storkreds blandt kandidater nu. kan bruge variablen i regressionen. 
+
+
+# Rettelse: Annoncer, som ikke har optrådt på fb eller instagram er kodet til NA. Laver det om til 0.
+fb_ads%>%
+  count(instagram)
+
+fb_ads$facebook <- fb_ads$facebook %>%
+  replace_na(0) 
+fb_ads$instagram <- fb_ads$instagram %>%
+  replace_na(0) 
+# RETTET #
+# Lav ny fb_ads som kan indlæses. 

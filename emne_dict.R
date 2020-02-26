@@ -1,10 +1,22 @@
 # 1 Indlæser pakker og data ####################
 
 library(pacman)
-p_load(tidyverse, readtext, quanteda, xtable, tictoc)
+p_load(tidyverse, readtext, quanteda, xtable, tictoc, estimatr, texreg, miceadds, sjPlot, sjmisc, effects)
 # måske lubridate, topicmodels
+options(scipen = 1) # skru ned for brugen af scientific notation
+theme_set(theme_sjplot()) # et lidt flottere standard tema
 
-fb_ads <- read_rds("FB API data/data/fb_ads.rds")
+
+fb_ads <- read_rds("FB API data/data/fb_ads.rds") # se rettelser sidst i DEC_ALT script. 
+
+# Rettelse: Annoncer, som ikke har optrådt på fb eller instagram er kodet til NA. Laver det om til 0.
+fb_ads%>%
+  count(instagram)
+
+fb_ads$facebook <- fb_ads$facebook %>%
+  replace_na(0) 
+fb_ads$instagram <- fb_ads$instagram %>%
+  replace_na(0) 
 glimpse(fb_ads)
 
 # Udvælger variable, som er relevante at have med i corpus, så jeg ikke har alt med:
@@ -242,7 +254,7 @@ intet_emne100 <- fb_ads %>%
  # HV-placering tilføjes
  fb_ads <- fb_ads %>%
    mutate(Højreorienteret = case_when(PARTI %in% c("A", "F", "OE", "B", "AA", "N") ~ 0,
-                                      PARTI %in% c("V", "C", "I", "K", "D", "E", "P") ~ 1,
+                                      PARTI %in% c("V", "C", "I", "K", "D", "E", "P", "O") ~ 1,
                                       T ~ NA_real_)) # Klaus Riskær Parti kodes som højreorienteret. Alternativet som venstreorienteret.
 
 # Her ved de statistiske test opstår samme problem som tidligere.
@@ -264,15 +276,173 @@ glimpse(fb_ads)
 
 ### RÅD TIL FREMGANGSMÅDE: Vent lidt med multinomial og start blot med at modellere 1 af de dikotome emner. Bare for at se fremgangsmåden. 
 
-# lineær uden noget som helst
-m0.emne <- lm(.klima)
-  
-  lm_robust(selvpersonaliseret ~ Højreorienteret, cluster = PARTI,
-                     
-data = fb_ads, se_type = "stata", weights = spend_mid)
+
+## KLIMA_MILJØ -----------------------------------------------------------
+### Lineære modeller =====================================================
+
+# 0 TEST; Estimerer alle dummy DV's i samme model
+# inspireret af multivariate multiple regression her https://stats.idre.ucla.edu/r/whatstat/what-statistical-analysis-should-i-usestatistical-analyses-using-r/#mmreg 
+
+mTEST.emne <- lm(cbind(.klima_miljo, .okonomi, .born, .sundhed, .eu, .flygninge_indvandrere, .pension, .aeldre, .integration) ~ Højreorienteret, data = fb_ads)
+#m1.emne <- lm(cbind(tidyselect::vars_select(starts_with("."))) ~ Højreorienteret, data = fb_ads) # virker vist
+#m1.emne <- lm(cbind(emner) ~ Højreorienteret, data = fb_ads) # virker vist også
+summary(mTEST.emne)
+# virker selvfølgelig ikke med texreg.
+# MEN: Man kan altså lave alle regressionerne simultant. 
+
+m1.emne <- lm(.klima_miljo ~ Højreorienteret, data = fb_ads)
+
+summary(m1.emne)
+# 11,1 % af de højreorienterede partiers annoncer er klima-miljø annoncer.
+# 31,4 % af de venstreorienterede partiers annoncer er klima-miljø annoncer.
+# SIGNIFIKANT forskel.
+
+fb_ads %>%
+  cbind(select(.,starts_with("."))) %>%
+          glimpse() # endte med ikke at bruge. skrev dem ud i cbind.
+# 2 lineær med vægt
+m2.emne <- lm(.klima_miljo ~ Højreorienteret, data = fb_ads,
+                     weights = spend_mid)
+summary(m2.emne)
+# 9,8 % af de højreorienterede partiers annoncekroner er gået til klima-miljø-annocer.
+# 39,6 % af de venstreorienterede partiers annoncekroner er gået til klima-miljø annoncer.
+# Koefficient (forskel): 29,9 pp.
+# SIGNIFIKANT forskel.
+
+# ... nu til klyngerobuste standardfejl
+
+# 3 lineær med vægt og klyngerobuste standardfejl
+m3.emne <- lm_robust(.klima_miljo ~ Højreorienteret, data = fb_ads,
+                      weights = spend_mid, cluster = PARTI, se_type = "stata")
+summary(m3.emne)
+# Estimaterne er de samme som model 2. Kun standardfejlene er vokset. 
+# Men det er STADIG signifikant. 
+
+# 4 lineær med få kontrolvariable
+m4.emne <- lm_robust(.klima_miljo ~ Højreorienteret + KØN + ALDER, data = fb_ads,
+                      weights = spend_mid, cluster = PARTI, se_type = "stata")
+summary(m4.emne)
+#  Koefficient: 29,4 pp.
+# Fortsat SIGNIFIKANT forskel
+# Kvinder mere klima end mænd (signifikant?)
+# Ikke nogen lineær effekt af alder.
+
+## Ekstra: Tjekker den bivariate sammenhæng mellem ALDER og Pr(klima=1)
+ggplot(fb_ads)+
+  geom_smooth(aes(x= ALDER, y= .klima_miljo)) + theme_minimal() 
+
+fb_ads %>%
+  ggplot(aes(x = ALDER, y = .klima_miljo)) +
+  geom_smooth(col = "blue", se = F) +
+  ggtitle("Sammenhæng mellem alder og andel klimaannoncer") +
+  labs(x = "Alder",
+       y = "Andel klimaannoncer",
+       caption = "Note: ") +
+  theme_sjplot()
+
+# Resultat: Sammenhængen mellem alder og klima-miljø er alt andet end lineær. 
+# Jeg ville gerne transformere den, men poly() siger, at der er missing values. Fortsætter uden.
+
+# 5 Lineær med alle kontrolvariable
+m5.emne <- lm_robust(.klima_miljo ~ Højreorienteret + KØN + ALDER + EP + instagram, data = fb_ads,
+                     weights = spend_mid, cluster = PARTI, se_type = "stata")
+summary(m5.emne)
+# Koefficient: 28,9 %
+# Fortsat SIGNIFIKANT forskel (men KÆMPE konfidensinterval på forskellen: højreorienterede promoverer 18 til 40 pp mere klima).
+# instgram og EP har ikke noget at byde på.
+
+# TIL LATEX
+texreg(list(m1.emne, m2.emne, m3.emne, m4.emne, m5.emne), 
+       dcolumn = TRUE, booktabs = TRUE, use.packages = FALSE, label = "tab:klima_hv", caption = "Klima- og miljø", float.pos = "hb!",
+       include.rmse = F, include.ci = F, include.rsquared = F, custom.note = "Lineære regressionsmodeller", stars = 0.05,
+       include.aic = F, include.bic = F, include.loglik = F, include.dev = F,
+       custom.gof.rows = list("Model" = c("lm a", "lm b", "lm c", "lm d", "lm e")))
+# model.names = c("Uvægtet", "Vægtet", "Vægtet ", "få kontrolvariable", "alle kontrolvariable"))) # custom række virker stadig ikke. 
+
+### TEST: Jeg laver lige en logistisk version DOG uden vægte. Til sammenligning. ### 
+
 # Brug evt. relevel(PARTI, ref = "v"), hvis der skal ændres referencekategori
 # højreorienteret er vel den egentlige test af hypotesen.
- 
 
-   
+# ... Her kunne jeg lave regressionerne for de enkelte partier - men det vil jeg ikke. Den statistiske test skal være TESTEN på hypotesen.
+# Ellers så opgiver jeg bare deskriptivt, hvor mange annoncer de forskellige partier har haft. Nu videre til logistisk. 
+#   Update på logistisk: Viser overordnet samme resultat: Signifikant forskel - også med robuste standardfejl. 
 
+#### Visualisering ------------------------------------------
+
+# Visualisering
+plot_model(m5.emne, type = "eff") # hold fast hvor er det en fed pakke! Ind i overleaf med noget af det. 
+
+
+# plot_model(ki_ltflygt_pooled, type = "eff", terms = c("Arbejdsløshedspct", "Flygt_pr_indb"), mdrt.values = "meansd",
+#           title = "B: Forudsagte værdier (kun for pooled OLS)",
+#           axis.title = c("Arbejdsløshedsprocent i kommunen", "Social tillid lokalt"))
+# Af typen "eff" for at holde de kategoriske variable i modellen på deres andele i stedet for på deres referencekategori. 
+
+
+### Logistiske modeller =========================================================
+
+# Logistiske modeller med robuste standardfejl, men UDEN vægte, fordi man ikke kan med glm binomial. 
+# Bruger glm.cluster fra miceadds pakken. 
+
+###  1 logistisk uden noget som helst ###
+
+glm1.klima <- glm(.klima_miljo ~ Højreorienteret, family = binomial(link = "logit"), data = fb_ads)
+
+# laver krydstabulering for at se, hvad der foregår
+CrossTable(fb_ads$.klima_miljo,fb_ads$Højreorienteret,
+           prop.c = F, prop.t = F, prop.chisq=F, prop.r = F)
+# Her kan jeg selv udregne odds for, at en højreorienteret annonce er en klima-annonce:
+  # Pr(1) / Pr(0)
+(916/8660)/(7744/8660) # odds for h = 0.1182851
+# og en venstreorienteret:
+(1734/5530)/(3796/5530) # odds for v = 0.4567966
+
+# ratio of the odds for, at venstreorienterede promoverer klima ift. en højreorienteret:
+(1734/3796)/(916/7744) # odds ratio er 3.861827
+# eller odds for at højreorienterede promoverer mere:
+(916*3796)/(1734*7744) # 0.2589448
+# odds for, at venstreorienterede promoverer klimaannoncer er altså 383 % højere end odds for, at højreorienterede gør det.
+
+# ... og nu kan vi se det i glm outputtet:
+summary(glm1.emne)
+# konstanten er log odds for venstreorienterede.
+log(0.46)
+# Koefficienten for h er the log of odds ratio mellem venstreorienterede og højreorienterede
+log(0.2589448) # -1.35114
+log(3.861827) # samme resultat. Perfekt. 
+# exponentials er det modsatte:
+exp(1.35114)
+# så koefficienten er altså log af odds ratioen for, at en højreorienteret promoverer en klimaannonce sammenlignet med en venstreorienteret.
+
+# log af odds for ratioen mellem sandsynligheden for at højerientede promoverer en klimaannonce sammenlignet med en venstreorienteret er (+/-) 1.35114. 
+# log af odds for at vvenstreorienterede annoncer promoverer en klimaannonce er -0.7765288 (konstanten).
+
+# SIGNIFIKANT forskel.
+
+
+# 2 logistisk med klyngerobuste standardfejl
+glm2.klima <- glm.cluster(.klima_miljo ~ Højreorienteret, family = binomial(link = "logit"), data = fb_ads,
+                          cluster = fb_ads$PARTI)
+summary(glm2.klima)
+# Estimaterne er de samme som model 1. Kun standardfejlene er vokset. 
+# stadig signifikant forskel.
+extract(glm2.klima) # texreg virker IKKE til dette formål. Fortsætter uden. 
+
+
+# 3 logistisk med klyngerobuste standardfejl og flere kontrolvariable
+glm3.klima <- glm.cluster(.klima_miljo ~ Højreorienteret + KØN + ALDER, family = binomial(link = "logit"), data = fb_ads,
+                          cluster = fb_ads$PARTI)
+glm3.klima
+# koefficinet -1.20615, stadig signifikant.
+
+# 4 logistisk med klyngerobuste standardfejl og alle kontrolvariable
+glm4.klima <- glm.cluster(.klima_miljo ~ Højreorienteret + KØN + ALDER + EP + instagram, family = binomial(link = "logit"), data = fb_ads,
+                          cluster = fb_ads$PARTI)
+glm4.klima
+summary(glm4.klima)
+#  Koefficient: -1.18854640, stadig signifikant. 
+
+
+# TIL LATEX
+# ... ikke muligt med glm.cluster. 

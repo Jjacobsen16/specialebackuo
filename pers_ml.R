@@ -580,7 +580,7 @@ fb_ads %>%
 # HV-placering (overvej at tilføje)
 fb_ads <- fb_ads %>%
   mutate(Højreorienteret = case_when(PARTI %in% c("A", "F", "OE", "B", "AA", "N") ~ 0,
-                                    PARTI %in% c("V", "C", "I", "K", "D", "E", "P") ~ 1,
+                                    PARTI %in% c("V", "C", "I", "K", "D", "E", "P", "O") ~ 1,
                                     T ~ NA_real_)) # Klaus Riskær Parti kodes som højreorienteret
 
 # Annoncer, som ikke har optrådt på fb eller instagram er kodet til NA. Laver det om til 0.
@@ -614,7 +614,7 @@ fb_ads <- fb_ads %>%
 
 ### VIGTIG ###
 glimpse(fb_ads)
-fb_ads2 %>%
+fb_ads %>%
   filter(kandidat_d == 1 & FT == 0 & EP == 0) %>%
   distinct(page_name, parti_navn)
 
