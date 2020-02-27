@@ -1,23 +1,14 @@
 # 1 Indlæser pakker og data ####################
 
 library(pacman)
-p_load(tidyverse, readtext, quanteda, xtable, tictoc, estimatr, texreg, miceadds, sjPlot, sjmisc, effects)
+p_load(tidyverse, readtext, quanteda, xtable, tictoc, estimatr, texreg, miceadds, sjPlot, sjmisc, effects, hrbrthemes, ggthemes)
 # måske lubridate, topicmodels
 options(scipen = 1) # skru ned for brugen af scientific notation
-theme_set(theme_sjplot()) # et lidt flottere standard tema
+# theme_set(theme_sjplot()) # et lidt flottere standard tema
 
 
-fb_ads <- read_rds("FB API data/data/fb_ads.rds") # se rettelser sidst i DEC_ALT script. 
+fb_ads <- read_rds("FB API data/data/fb_ads.rds") 
 
-# Rettelse: Annoncer, som ikke har optrådt på fb eller instagram er kodet til NA. Laver det om til 0.
-fb_ads%>%
-  count(instagram)
-
-fb_ads$facebook <- fb_ads$facebook %>%
-  replace_na(0) 
-fb_ads$instagram <- fb_ads$instagram %>%
-  replace_na(0) 
-glimpse(fb_ads)
 
 # Udvælger variable, som er relevante at have med i corpus, så jeg ikke har alt med:
 corpus_data <- select(fb_ads, c(ad_id, ad_creative_body, page_name, PARTI, kandidat_d)) # parti_navn, KØN, ALDER, spend_mid, spend_interval, impressions_mid, impressions_interval, facebook, instagram))
@@ -158,6 +149,11 @@ emne_df <- dfm_emne %>%
   convert("data.frame")
 glimpse(emne_df)
 
+# VIGTIG: Omkoder smelter flygtninge_indvandrere og integration sammen
+emne_df <- emne_df %>%
+  mutate(.indvandrere = .flygninge_indvandrere + .integration) %>%
+  select(-.flygninge_indvandrere, -.integration) # fjerner de gamle
+
 # Laver en dikotom version, så det er docfreq i stedet for count
 emne_01df <- emne_df
 emne_01df[,2:length(emne_df)][emne_df[,2:length(emne_df)] > 1] <- 1
@@ -178,54 +174,251 @@ emne_01df %>%
 # Hvordan er fordelingen mellem emner?
 # colSums(select(emne_01df,-"document")) - den viser bare docfreq, samme som "stats_emne" oven for. 
 
-# Merger resultaterne til election dataframe
+# Merger resultaterne til fb_ads
 fb_ads <- fb_ads %>%
   left_join(emne_01df, by = c("ad_id" = "document"))
 
-glimpse(fb_ads)
-
 # FOrdelingen på tværs af partier?
 
-fb_ads %>%
-  group_by(parti_navn) %>%
+emne_count <- fb_ads %>%
+  group_by(PARTI) %>%
   summarise(n_ads = n(),
             klima_miljø = sum(.klima_miljo),
             børn = sum(.born),
             eu = sum(.eu),
             sundhed = sum(.sundhed),
-            flygninge_indvandrere = sum(.flygninge_indvandrere),
+            indvandrere = sum(.indvandrere),
             økonomi = sum(.okonomi),
             pension = sum(.pension),
             ældre = sum(.aeldre),
-            integration = sum(.integration),
             ikke_kategoriseret = sum(ingen_emner),
             kategoriseret = n_ads-ikke_kategoriseret
   ) %>%
   arrange(desc(n_ads))
 # tilføj evt. colSums til df
 
+# Laver det til langt format, så jeg kan lave plots
+emne_count_long <- emne_count %>%
+  select(-n_ads, -kategoriseret, -ikke_kategoriseret) %>%
+  pivot_longer(-PARTI, names_to = "emne", values_to = "antal") %>%
+  mutate(emne = as.factor(emne))
+# super.
+
+# Hvilke emner var mest populære (count) [kan fx sammenlignes med dotplot for s]
+emne_count_long %>%
+  group_by(emne) %>%
+  summarise(sum = sum(antal)) %>%
+  arrange(desc(sum))
+
+#### OVERORDNET deskriptivt ----------------------------------------------------
+# Overordnet: Hvor mange af annoncerne promoverede forskellige emner?
+fb_ads %>%
+  count(ingen_emner) # 8477 ud af 14.190 annoncer er kategoriseret.
+fb_ads %>%
+  count(antal_emner)
+fb_ads %>%
+  filter(antal_emner > 1) %>%
+  nrow() # 2.953 annoncer handler om mere end et emne. 
+
 
 # Og samme tabel i procent (andel af alle partiets annoncer)
 
-fb_ads %>%
-  group_by(parti_navn) %>%
+emne_prop<- fb_ads %>%
+  group_by(PARTI) %>%
   summarise(n_ads = n(),
             klima_miljø = sum(.klima_miljo)/n_ads,
             børn = sum(.born)/n_ads,
             eu = sum(.eu)/n_ads,
             sundhed = sum(.sundhed)/n_ads,
-            flygninge_indvandrere = sum(.flygninge_indvandrere)/n_ads,
+            indvandrere = sum(.indvandrere)/n_ads,
             økonomi = sum(.okonomi)/n_ads,
             pension = sum(.pension)/n_ads,
             ældre = sum(.aeldre)/n_ads,
-            integration = sum(.integration)/n_ads,
             kategoriseret = 1-mean(ingen_emner),
             ikke_kategoriseret = mean(ingen_emner)
   ) %>%
   arrange(desc(n_ads))
 # tilføj evt. colSums til df
 
+# Laver det til langt format, så jeg kan lave plots
+emne_prop_long <- emne_prop %>%
+  select(-n_ads, -kategoriseret, -ikke_kategoriseret) %>%
+  pivot_longer(-PARTI, names_to = "emne", values_to = "andel") %>%
+  mutate(emne = as.factor(emne))
+# super.
 
+# partiernes hv-placering 2019 ifølge Johan inspireret af
+# https://www.altinget.dk/christiansborg/artikel/nyt-politisk-kompas-saadan-placerer-partierne-sig 
+hv <- c("OE", "N", "F", "A", "AA", "B", "K", "E", "O", "V", "C", "I", "D", "P")
+
+# Heatmap med andel annoncer
+ggplot(emne_prop_long, aes(x = reorder(emne,-andel), y = fct_relevel(PARTI, hv), fill= andel)) + 
+  geom_tile() +
+  #scale_fill_distiller(palette = "RdPu") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal() +
+  labs(x = "Emne",
+       y = "Partibogstav",
+       fill = "Andel",
+       caption = "Figuren viser andelen af partiernes annoncer, som promoverer hvilke emner") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+        #legend.position = 
+        #legend.direction = "horizontal")
+# ggsave("emne_heatmap.png", width = 7, height = 5)
+
+### VÆGTET EFTER ANNONCEPRIS #########################################
+  # Her ser jeg på, hvor mange annoncekroner, de enkelte partier har brugt på at
+  # promovere politiske annoncer ud af deres samlede annoncebudget.
+
+# Og hvis jeg ser på ad spend i stedet for number of ads?
+emne_spend <- fb_ads %>%
+  group_by(PARTI) %>%
+  summarise(total_spend = sum(spend_mid),
+            klima_miljø = sum(.klima_miljo*spend_mid),
+            børn = sum(.born*spend_mid),
+            eu = sum(.eu*spend_mid),
+            sundhed = sum(.sundhed*spend_mid),
+            indvandrere = sum(.indvandrere*spend_mid),
+            økonomi = sum(.okonomi*spend_mid),
+            pension = sum(.pension*spend_mid),
+            ældre = sum(.aeldre*spend_mid),
+            ikke_kategoriseret = sum(ingen_emner*spend_mid),
+            kategoriseret = total_spend-ikke_kategoriseret
+  ) %>%
+  arrange(desc(total_spend))
+
+emne_spend %>%
+  arrange(desc(børn))
+# Kolonnerne kategoriseret/ ikke kategoriseret skal summe op til total_spend. Tjekker det.
+emne_spend %>%
+  mutate(total_spend2 = ikke_kategoriseret+kategoriseret) %>%
+  select(starts_with("total")) # Det stemmer. 
+# Vær opmærksom på, at forbrug på de enkelte emner ikke summer op til total_spend, fordi 1 annonce
+# med flere emner tæller flere gange. 
+
+# Laver det til langt format, så jeg kan lave plots
+emne_spend_long <- emne_spend %>%
+  select(-total_spend, -kategoriseret, -ikke_kategoriseret) %>%
+  pivot_longer(-PARTI, names_to = "emne", values_to = "spend") %>%
+  mutate(emne = as.factor(emne))
+
+# Deskriptivt: Hvor mange penge har partierne brugt på at promovere de forskellige emner:
+emne_spend_dot<- emne_spend_long %>%
+  group_by(emne) %>%
+  summarise(spend = sum(spend)) %>%
+  arrange(desc(spend))
+
+# Vis i et dotplot
+ggplot(data = emne_spend_dot, aes(x = reorder(emne, spend), y = spend/1000000)) + #ymin = lower, ymax = upper, colour = sex)) +
+  geom_point(size = 2) +#position = position_dodge(width = 0.2)) +
+  ylim(0, 3.5) +
+  # geom_errorbar(position = position_dodge(width = 0.2), width = 0.1) +
+  coord_flip() +
+  # scale_colour_manual(values = c("blue", "red")) +
+  theme_sjplot() +
+  labs(x = NULL, 
+       y = "Annoncekroner (mio.)") + 
+      # caption = "Beregningen er baseret på medianen af det interval for annoncens pris,\n som Facebook giver til rådighed") +
+  theme(axis.text.x = element_text(angle = NULL, hjust = NULL))
+ggsave("emne_dot.pdf", width = 6, height = 4)
+
+### Og samme tabel i procent (andel af partiets samlede annonceforbrug) ###
+
+emne_spend_prop<- fb_ads %>%
+  group_by(PARTI) %>%
+  summarise(total_spend = sum(spend_mid),
+              klima_miljø = sum(.klima_miljo*spend_mid) / total_spend,
+              børn = sum(.born*spend_mid)/ total_spend,
+              eu = sum(.eu*spend_mid)/ total_spend,
+              sundhed = sum(.sundhed*spend_mid)/ total_spend,
+              indvandrere = sum(.indvandrere*spend_mid)/ total_spend,
+              økonomi = sum(.okonomi*spend_mid)/ total_spend,
+              pension = sum(.pension*spend_mid)/ total_spend,
+              ældre = sum(.aeldre*spend_mid)/ total_spend,
+              ikke_kategoriseret = sum(ingen_emner*spend_mid)/ total_spend,
+              kategoriseret = 1-ikke_kategoriseret
+  ) %>%
+  arrange(desc(total_spend))
+# tilføj evt. colSums til df
+fb_ads %>%
+  group_by(KØN) %>%
+  distinct(STEMMESEDDELNAVN, .keep_all = TRUE ) %>%
+  count(Højreorienteret)
+# Laver det til langt format, så jeg kan lave plots
+emne_spend_prop_long <- emne_spend_prop %>%
+  select(-total_spend, -kategoriseret, -ikke_kategoriseret) %>%
+  pivot_longer(-PARTI, names_to = "emne", values_to = "Andel") %>%
+  mutate(emne = as.factor(emne))
+# super.
+
+# NU kan jeg lave et tilsvarende heatmap med annoncekroner i stedet for anatal ads. 
+ggplot(emne_spend_prop_long, aes(x = reorder(emne,-Andel), y = fct_relevel(PARTI, hv), fill= Andel)) + 
+  geom_tile() +
+  #scale_fill_distiller(palette = "RdPu") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal() +
+  labs(x = "Emne",
+       y = "Partibogstav",
+       caption = "Figuren viser andelen af partiernes annoncekroner brugt på at promovere hvilket emne") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+#legend.position = 
+#legend.direction = "horizontal")
+# ggsave("emne_heatmap_spend.png", width = 7, height = 5)
+
+#########################
+  
+  
+  
+  group_by(PARTI) %>%
+  summarise(total_spend = sum(spend_mid),
+            klima_miljø = sum(.klima_miljo),
+            børn = sum(.born),
+            eu = sum(.eu),
+            sundhed = sum(.sundhed),
+            indvandrere = sum(.indvandrere),
+            økonomi = sum(.okonomi),
+            pension = sum(.pension),
+            ældre = sum(.aeldre),
+            ikke_kategoriseret = sum(ingen_emner),
+            kategoriseret = n_ads-ikke_kategoriseret
+  ) %>%
+  arrange(desc(n_ads))
+
+fb_ads %>%
+  select(PARTI, starts_with(".")) %>%
+  pivot_longer(-PARTI, names_to = "emne", values_to = "andel") %>%
+  mutate(emne = as.factor(emne))
+  
+  
+
+
+fb_ads %>%
+  mutate(spend_klima = selvpersonaliseret*spend_mid,
+         spend_pers_min = selvpersonaliseret*spend_lower_bound) %>%
+  group_by(parti_navn) %>%
+  summarise(spend = sum(spend_mid),
+            pers_spend = sum(spend_pers),
+            share_pers_spend = pers_spend/spend*100,
+            spend_min = sum(spend_lower_bound),
+            spend_pers_min2 = sum(spend_pers_min)) %>% 
+  arrange(desc(share_pers_spend))
+#spend_perstest = sum(selvpersonaliseret*spend_mid))
+colSums(parti_resultat[,2:6]) # Nej det kan ikke passe at de har brugt min. 3.75 mio. kroner?
+# Update: Jo, det kan det sagtens. I valgkampens sidste 4 uger brugte kandidaterne lidt over 6 mio. kroner.
+# colSums driller med scientific notation. slukker det:
+# options(scipen = 500)
+
+#Eksport tab:selvpersonaliseret_spend
+xtable(parti_resultat[1:4], digits = 1,
+       auto = TRUE, type = "latex")
+
+
+arrange(desc(share_pers_spend))
+
+# Visualisering af parti resultat
+parti_resultat %>%
+  ggplot(aes(x = reorder(parti_navn, spend), y = spend, fill = share_pers_spend)) + 
+  geom_bar(position = "stack", stat = "identity") + coord_flip() + theme_minimal()
 
 ### UDTRÆK AF ANNONCER UDEN EMNE ###
 # Laver et udtræk af 100 annoncer uden emne for at se, om der er nogle relevante annoncer, der gemmer sig
@@ -251,11 +444,9 @@ intet_emne100 <- fb_ads %>%
 
 # 2 Statistiske tests -------------------------------------------------------
 
- # HV-placering tilføjes
- fb_ads <- fb_ads %>%
-   mutate(Højreorienteret = case_when(PARTI %in% c("A", "F", "OE", "B", "AA", "N") ~ 0,
-                                      PARTI %in% c("V", "C", "I", "K", "D", "E", "P", "O") ~ 1,
-                                      T ~ NA_real_)) # Klaus Riskær Parti kodes som højreorienteret. Alternativet som venstreorienteret.
+ # HV-placering
+ fb_ads %>%
+   distinct(parti_navn, Højreorienteret)
 
 # Her ved de statistiske test opstår samme problem som tidligere.
 # Jeg bør estimere det som en logistisk regression, men så kan jeg ikke få vægte på.
@@ -279,6 +470,9 @@ glimpse(fb_ads)
 
 ## KLIMA_MILJØ -----------------------------------------------------------
 ### Lineære modeller =====================================================
+
+# JJ VIGTIG! Ændrer "Højreorienteret" til faktor variabel (fra nuværende numeric)
+fb_ads$Højreorienteret <- as.factor(fb_ads$Højreorienteret)
 
 # 0 TEST; Estimerer alle dummy DV's i samme model
 # inspireret af multivariate multiple regression her https://stats.idre.ucla.edu/r/whatstat/what-statistical-analysis-should-i-usestatistical-analyses-using-r/#mmreg 
@@ -321,7 +515,8 @@ summary(m3.emne)
 # 4 lineær med få kontrolvariable
 m4.emne <- lm_robust(.klima_miljo ~ Højreorienteret + KØN + ALDER, data = fb_ads,
                       weights = spend_mid, cluster = PARTI, se_type = "stata")
-summary(m4.emne)
+summary(m4.emne) # OBS! Der er lidt bedre modelfit med ordinary polynomial term + I(ALDER^2) - overvej at tilføje.
+                 # (i mangel på bedre nu når poly() ikke virker?)
 #  Koefficient: 29,4 pp.
 # Fortsat SIGNIFIKANT forskel
 # Kvinder mere klima end mænd (signifikant?)
@@ -354,7 +549,7 @@ summary(m5.emne)
 # TIL LATEX
 texreg(list(m1.emne, m2.emne, m3.emne, m4.emne, m5.emne), 
        dcolumn = TRUE, booktabs = TRUE, use.packages = FALSE, label = "tab:klima_hv", caption = "Klima- og miljø", float.pos = "hb!",
-       include.rmse = F, include.ci = F, include.rsquared = F, custom.note = "Lineære regressionsmodeller", stars = 0.05,
+       include.rmse = F, include.ci = F, include.rsquared = F, custom.note = "Standardfejl i parantes", stars = 0.05,
        include.aic = F, include.bic = F, include.loglik = F, include.dev = F,
        custom.gof.rows = list("Model" = c("lm a", "lm b", "lm c", "lm d", "lm e")))
 # model.names = c("Uvægtet", "Vægtet", "Vægtet ", "få kontrolvariable", "alle kontrolvariable"))) # custom række virker stadig ikke. 
@@ -369,11 +564,32 @@ texreg(list(m1.emne, m2.emne, m3.emne, m4.emne, m5.emne),
 #   Update på logistisk: Viser overordnet samme resultat: Signifikant forskel - også med robuste standardfejl. 
 
 #### Visualisering ------------------------------------------
-
+set_theme(theme_sjplot(base_size = 10))
 # Visualisering
-plot_model(m5.emne, type = "eff") # hold fast hvor er det en fed pakke! Ind i overleaf med noget af det. 
 
+# PLot marginale effekter fra regressionsmodellen
+# "pred" er når øvrige variable er på 0 (som i normalt regtabel output) "eff" er hvor de er holdt på deres gennemsnit.
+plot_model(m5.emne.alderx2, type = "eff", terms = c("ALDER [19:74]", "Højreorienteret"),
+           axis.title = c("Alder", "Forudsagt andel klima- og miljøannoncer"), title = "Promovering af klima- og miljøannoncer") +
+  theme(legend.position = "none") 
+           # 19-74 er det spænd, der er observationer inden for. 
+           # OBS! Jeg har ladet alder være en ordinært kvadreret led her.
+# ggsave("klima_alderx2.pdf", width = 5, height = 4)
 
+# 2: Bare højreorientering (det min hypotese går på)
+# med plot_model https://strengejacke.github.io/sjPlot/articles/plot_model_estimates.html 
+plot_model(m5.emne, type = "est", sort.est = T, show.values = T, value.offset = .3,
+           axis.title = c("Estimater", ""), title = "Promovering af klima- og miljøannoncer",
+           axis.labels = c("Højreorienteret", "Mand", "Instagram", "Alder", "EP"))#+
+  # labs(x = "Alder", y = "Pr(klima- og miljø = 1)", caption = "Note: Konfidensintervallet markeret omkring de forudsagte værdier") +
+  #ggtitle("Sandsynligheden for at promovere annoncer om klima- og miljø",
+         # subtitle = "For politikere på venstrefløjen (rød) og højrefløjen (blå) efter alder") +
+ # theme(legend.position = "none") 
+# ggsave("klima_hv_plot.pdf", width = 5, height = 4)
+
+fb_ads %>%
+  count(ALDER) %>%
+  tail()
 # plot_model(ki_ltflygt_pooled, type = "eff", terms = c("Arbejdsløshedspct", "Flygt_pr_indb"), mdrt.values = "meansd",
 #           title = "B: Forudsagte værdier (kun for pooled OLS)",
 #           axis.title = c("Arbejdsløshedsprocent i kommunen", "Social tillid lokalt"))
