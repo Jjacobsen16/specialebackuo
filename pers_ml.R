@@ -2,7 +2,7 @@
 ## 1.1 Indlæser pakker og data =================================
 
 library(pacman)
-p_load(tidyverse, quanteda, xtable, tictoc, caret, readxl, estimatr, texreg, broom, miceadds) # måske lubridate, topicmodels, readtext, agendacodeR
+p_load(tidyverse, quanteda, xtable, tictoc, caret, readxl, estimatr, texreg, broom, miceadds, ggbeeswarm) # måske lubridate, topicmodels, readtext, agendacodeR
 
 
 fb_ads <- read_rds("FB API data/data/fb_ads.rds")
@@ -557,15 +557,33 @@ colSums(parti_resultat[,2:6]) # Nej det kan ikke passe at de har brugt min. 3.75
 xtable(parti_resultat[1:4], digits = 1,
        auto = TRUE, type = "latex")
             
-            
-  arrange(desc(share_pers_spend))
+# marts NYT: Jeg visualiserer resultatet i et stacked bar plot i stedet.
+glimpse(parti_resultat)
+
+# Skal have det i langt format, så jeg får en kategori for spend: personal/ not personal
+parti_resultat_lang <- parti_resultat %>%
+mutate(not_pers_spend = spend-pers_spend) %>%
+  pivot_longer(cols = c(pers_spend, not_pers_spend), names_to = "pers", values_to = "lang_spend")
+glimpse(parti_resultat_lang) # fint!
 
 # Visualisering af parti resultat
-parti_resultat %>%
-  ggplot(aes(x = reorder(parti_navn, spend), y = spend, fill = share_pers_spend)) + 
-  geom_bar(position = "stack", stat = "identity") + coord_flip() + theme_minimal()
-
-# Ser spændende ud!
+parti_resultat_lang %>%
+  ggplot(aes(x = reorder(parti_navn, -spend), y = lang_spend/1000, fill = pers)) + 
+  geom_bar(position = "stack", stat = "identity") + coord_flip() + theme_minimal() +
+  geom_text(size = 3, aes(label = ifelse(pers == "pers_spend", paste0(round(share_pers_spend,1), "%"), ""),
+                          hjust = case_when(spend < 100000 ~ -.2, # E, N
+                                            spend < 111000 ~ -.4, # Å
+                                            spend < 112000 ~ -.7, # D
+                                            spend < 460000 ~ -1.05, # K og Ø
+                                            spend < 470000 ~ -.75,
+                                            TRUE ~ -.1))) + # Resten
+  scale_fill_manual(values = c("grey72", ku_rød), labels = c("Ikke selvpersonaliseret","Selvpersonaliseret")) +
+  labs(x = element_blank(), y = element_blank(), fill = "Selvpersonaliseret",title = "Kandidaternes annonceforbrug (tusinde kroner)",
+       caption = "Note: Andel selvpersonaliseret angivet i procent") +
+  #scale_y_continuous(limits = c(100, 800), breaks = c(seq(100,800,100))) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+ggsave("stack_pers.pdf", width = 6, height = 4.5)
+# Der var den sgu!
 
 # Lad os definere et par variable og udføre TESTEN: two-sample t-test.
 
@@ -643,6 +661,7 @@ fb_ads <- fb_ads %>%
 # Så må mit spørgsmål til Frederik være, hvilke af modellerne, jeg skal præsentere. 
 
 ### Model -1 : Den helt simple comparison of two proportions (two proportions z-test) -------------------
+  # Identisk med en chi^2 test.
   # Er decentraliserede partier mere selvpersonaliserede?
 
 # finder antal selvpersonaliserede i hver kategori (centralisering)
@@ -657,7 +676,7 @@ colnames(selvp.matrix) <- c("selvpersonaliseret", "ikke selvpersonaliseret")
 rownames(selvp.matrix) <- c("centraliseret", "decentraliseret")
 prop.table(selvp.matrix, 1) # Viser andel selvpersonaliserede annoncer inden for de to grupper (centralisering vs. decentralisering) [dvs. row = 100%]
 
-prop.test(selvp.matrix, correct = F) # med correct = FALSE fjerner jeg Yates continuity correction.
+prop.test(selvp.matrix, correct = F, alternative = "two.sided") # med correct = FALSE fjerner jeg Yates continuity correction.
 # RESULTAT: Andelen af selvpersonaliserede annoncer blandt kandidater fra decentraliserede partier er 37.64 pct.
           # Andelen af selvpersonaliserede annoncer blandt kandidater fra centraliserede partier er 32.15 pct.
           # Forskelen er statistisk signifikant, siger testen. 
@@ -1092,7 +1111,6 @@ kandidater %>%
   coord_flip() +
   xlab("Partibogstav") +
   ylab("log(kandidaternes totale annonceforbrug") 
-
 #ggsave("kandidat_pers_prik.pdf", width = 7, height = 6)
 
 kandidater %>%
@@ -1102,3 +1120,52 @@ kandidater %>%
 fb_ads %>%
   filter(STEMMESEDDELNAVN == "Rosa Lund") %>%
   select(ad_id, selvpersonaliseret, ad_creative_body)
+
+
+
+# Marts nyt ---------------------------------------------------------------
+
+# Jeg forbedrer visualiseringerne i analyseafsnittet. 
+  # Laver et stacked bar plot i stedet for tabellen med spend
+  # Laver et swarm plot i stedet for det rodede dotplot. 
+
+# SWARM PLOT
+# Anvender ggbeeswarm som er en udvidelse til ggplot2.
+
+set.seed(1603)
+
+# Sætter KU farver
+ku_rød <- rgb(144, 26, 30, maxColorValue=255, alpha=255)
+ku_grå <- rgb(102, 102, 102, maxColorValue=255, alpha=255)
+
+# For dem, der har brugt max 100.000 kroner
+kandidater %>%
+  mutate(pers_gns = if_else(share_pers_spend > .345656, "Over gns.", "Under gns.")) %>%
+  ggplot(aes(x = reorder(PARTI, -parti_spend), y = spend/1000, colour = pers_gns)) + # spend i tusinde kroner
+  geom_beeswarm(dodge.width = -.75) +
+  theme_minimal() +
+  coord_flip() +
+  labs(x = "Partibogstav", y = element_blank(), color = "Andel selvpersonaliseret",
+       title = "Kandidaternes annonceforbrug (tusinde kroner)") + #,
+       # caption = "Note: Hver prik repræsenterer 1 kandidat") +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "bottom") +
+  scale_color_manual(values = c(ku_rød, "#4E84C4"))
+ggsave("pers_spend_dot100.pdf", width = 6, height = 5)
+
+# For dem, der har brugt over 100.000 kroner
+kandidater %>%
+  mutate(pers_gns = if_else(share_pers_spend > .345656, "Over gns.", "Under gns.")) %>%
+  ggplot(aes(x = reorder(PARTI, -parti_spend), y = spend/1000, colour = pers_gns)) + # spend i tusinde kroner
+  geom_beeswarm(dodge.width = -.75) +
+  theme_minimal() +
+  coord_flip() +
+  labs(x = "Partibogstav", y = "Kandidaternes totale annonceforbrug (tusinde kroner)", color = "Andel selvpersonaliseret") +
+  scale_y_continuous(limits = c(100, 800), breaks = c(seq(100,800,100))) +
+  theme(legend.position = "bottom", legend.justification='right') +
+  scale_color_manual(values = c(ku_rød, "#4E84C4"))
+ggsave("pers_spend_dot800.pdf", width = 6, height = 5)
+
+# Overvej at navngive nogle dots. 
+
+# De ser fine ud nu. Nr. 2 ryger i bilag.

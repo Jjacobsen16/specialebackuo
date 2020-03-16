@@ -355,19 +355,21 @@ emne_prop_long <- emne_prop %>%
 hv <- c("OE", "N", "F", "A", "AA", "B", "K", "E", "O", "V", "C", "I", "D", "P")
 
 # Heatmap med andel annoncer
-ggplot(emne_prop_long, aes(x = reorder(emne,-andel), y = fct_relevel(PARTI, hv), fill= andel)) + 
+emne_prop_long %>%
+  filter(!PARTI == "P") %>%
+ggplot(aes(x = reorder(emne,-andel), y = fct_relevel(PARTI, hv), fill= andel)) + 
   geom_tile() +
   #scale_fill_distiller(palette = "RdPu") +
-  scale_fill_gradient(low = "white", high = "steelblue") +
+  scale_fill_gradient(low = "white", high = ku_rød) +
   theme_minimal() +
   labs(x = "Emne",
        y = "Partibogstav",
-       fill = "Andel",
-       caption = "Figuren viser andelen af partiernes annoncer, som promoverer hvilke emner") +
+       fill = "Andel") +
+       # caption = "Figuren viser andelen af partiernes annoncer, som promoverer hvilke emner") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
         #legend.position = 
         #legend.direction = "horizontal")
-# ggsave("emne_heatmap.png", width = 7, height = 5)
+ ggsave("emne_heatmap_red.pdf", width = 7, height = 5)
 
 ### VÆGTET EFTER ANNONCEPRIS #########################################
   # Her ser jeg på, hvor mange annoncekroner, de enkelte partier har brugt på at
@@ -455,18 +457,20 @@ emne_spend_prop_long <- emne_spend_prop %>%
 # super.
 
 # NU kan jeg lave et tilsvarende heatmap med annoncekroner i stedet for anatal ads. 
-ggplot(emne_spend_prop_long, aes(x = reorder(emne,-Andel), y = fct_relevel(PARTI, hv), fill= Andel)) + 
+emne_spend_prop_long %>%
+  filter(!PARTI == "P") %>%
+ggplot(aes(x = reorder(emne,-Andel), y = fct_relevel(PARTI, hv), fill= Andel)) + 
   geom_tile() +
   #scale_fill_distiller(palette = "RdPu") +
-  scale_fill_gradient(low = "white", high = "steelblue") +
+  scale_fill_gradient(low = "white", high = ku_rød) +
   theme_minimal() +
   labs(x = "Emne",
-       y = "Partibogstav",
-       caption = "Figuren viser andelen af partiernes annoncekroner brugt på at promovere hvilket emne") +
+       y = "Partibogstav") +
+       # caption = "Figuren viser andelen af partiernes annoncekroner brugt på at promovere hvilket emne") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 #legend.position = 
 #legend.direction = "horizontal")
-# ggsave("emne_heatmap_spend.png", width = 7, height = 5)
+# ggsave("emne_heatmap_spend_red.pdf", width = 6, height = 5)
 
 #########################
   
@@ -511,17 +515,19 @@ colSums(parti_resultat[,2:6]) # Nej det kan ikke passe at de har brugt min. 3.75
 # colSums driller med scientific notation. slukker det:
 # options(scipen = 500)
 
-#Eksport tab:selvpersonaliseret_spend
-xtable(parti_resultat[1:4], digits = 1,
-       auto = TRUE, type = "latex")
-
-
-arrange(desc(share_pers_spend))
-
-# Visualisering af parti resultat
-parti_resultat %>%
-  ggplot(aes(x = reorder(parti_navn, spend), y = spend, fill = share_pers_spend)) + 
-  geom_bar(position = "stack", stat = "identity") + coord_flip() + theme_minimal()
+# SLET DETTE ### 
+# #Eksport tab:selvpersonaliseret_spend
+# xtable(parti_resultat[1:4], digits = 1,
+#        auto = TRUE, type = "latex")
+# 
+# 
+# arrange(desc(share_pers_spend))
+# 
+# # Visualisering af parti resultat
+# parti_resultat %>%
+#   ggplot(aes(x = reorder(parti_navn, spend), y = spend, fill = share_pers_spend)) + 
+#   geom_bar(position = "stack", stat = "identity") + coord_flip() + theme_minimal()
+# SLET DETTE ###
 
 ### UDTRÆK AF ANNONCER UDEN EMNE ###
 # Laver et udtræk af 100 annoncer uden emne for at se, om der er nogle relevante annoncer, der gemmer sig
@@ -811,6 +817,9 @@ lang_emne <- lang_emne %>%
          Venstre_emne = if_else(Højre_emne == 1, 0, 1)) # Dette er præcis den samme variabel som højre_emne.
                                                         # Den er blot vendt om for at lette fortolkningen.
 
+lang_emne <- lang_emne %>%
+  mutate(emne_prioritet = spend_mid/antal_emner)
+
 dim(lang_emne_test) # 113.520 og 26
 lang_emne_test %>%
   count(emne_ejerskab, emne_til_stede)
@@ -1096,7 +1105,7 @@ plot_model(m4.højre, type = "est", sort.est = T, show.values = T, value.offset 
   labs (caption = "Note: Konfidensintervallet markeret omkring de forudsagte værdier")
   # subtitle = "For politikere på venstrefløjen (rød) og højrefløjen (blå) efter alder"
   # theme(legend.position = "none") 
-ggsave("højre_emneejerskab.pdf", width = 4.5, height = 3.5)
+# ggsave("højre_emneejerskab.pdf", width = 4.5, height = 3.5)
   
 # Kan jeg plotte det på anden vis?
 
@@ -1254,11 +1263,10 @@ fb_ads %>%
 # Laver højreorienteret om til faktorvariabel 
 lang_emne <- lang_emne %>%
   mutate(Højreorienteret = set_labels(Højreorienteret, labels = c(`Venstrefløj` = 0, `Højrefløj` = 1)),
-         Højreorienteret = as_factor(Højreorienteret1))
+         Højreorienteret = as_factor(Højreorienteret))
 
-get_labels(lang_emne$Højreorienteret1) # Det ser ud til at virke,
+get_labels(lang_emne$Højreorienteret) # Det ser ud til at virke,
 
-lang_emne$Højreorienteret <- as.numeric(lang_emne$Højreorienteret)
 # -1 chi^2 test
 # finder antal annoncer om højrefløjens emner i hver kategori (højrefløj/ venstrefløj)
 lang_emne %>%
@@ -1279,7 +1287,7 @@ prop.test(højre.matrix, correct = F, alternative = "two.sided") # med correct =
 # 0 Chi^2 testen foretaget gennem lineær regression: 
 m0.højre <- lm_robust(Højre_emne ~ Højreorienteret, data = lang_emne)
 summary(m0.højre)
-summary(m0.højre.ni) # no intercept
+# summary(m0.højre.ni) # no intercept
 # Samme resultat som chi^2. Koefficienten viser forskellen mellem andelen af højrefløjens annoncer om emner, de har ejerskab over, 
   # sammenlignet med andelen af venstrefløjens annoncer om emner, de IKKE har ejerskab over. 
 # Fint. Udbygger testen med vægte, klyngerobuste standardfejl og kontrolvariable på individniveau. 
@@ -1316,11 +1324,17 @@ summary(m5.højre)
 m5.højre$N # antal observationer
 m5.højre$N_clusters # antal klynger.
 
+# Tjekker lige gennemsnitsalderen
+fb_ads %>%
+  distinct(STEMMESEDDELNAVN, .keep_all = T) %>%
+  select(ALDER) %>%
+  summary()
+
 # Plotter koefficienterne
 plot_model(m4.højre, type = "est", sort.est = T, show.values = T, value.offset = NULL, 
-           axis.title = "Estimater", title = "Promovering af emner, partiet har ejerskab over",
-           axis.labels = c("Alder", "Højrefløj", "Mand")) + theme_sjplot(base_size = 11) +
-  labs (caption = "Note: 95 % konfidensinterval markeret omkring koefficienterne")
+           axis.title = "Koefficienter", title = "Promovering af emner, fløjen har ejerskab over",
+           axis.labels = c("Alder", "Højrefløj", "Mand")) + theme_sjplot(base_size = 12) +
+  labs (caption = "Note: 95 % konfidensinterval markeret")
   # labs(x = "Alder", y = "Pr(klima- og miljø = 1)", caption = "Note: Konfidensintervallet markeret omkring de forudsagte værdier") +
   # subtitle = "For politikere på venstrefløjen (rød) og højrefløjen (blå) efter alder"
   # theme(legend.position = "none") 
@@ -1329,12 +1343,21 @@ ggsave("hojre_emne.pdf", width = 5, height = 4)
 # Plotter forudsagte værdier (marginale effekter)
   # med type = "eff" holder jeg kategoriske predictors (køn) på gennemsnit frem for referencekategori (kvinde)
 plot_model(m4.højre, type = "eff", terms = "Højreorienteret",
-           title = "Marginale effekter af emneejerskab", axis.title = c("", "Promovering af emner, højrefløjen har ejerskab over"),
-           grid.breaks =.05, ci.lvl = .95) +
+           title = "Promovering af højrefløjens emner", axis.title = c("", "Forudsagt andel"),
+           grid.breaks =.05, ci.lvl = .95, show.values = T) +
   # grid.breaks og show.values virker ikke. 
-  theme_sjplot(base_size = 11) + coord_flip() +
-  labs (caption = "Note: 95 % konfidensinterval markeret omkring de forudsagte værdier")
-ggsave("marginal_emne.pdf", width = 5, height = 2)
+  theme_sjplot(base_size = 12) + coord_flip() +
+  labs (caption = "Note: 95 % konfidensinterval markeret")
+ggsave("forudsagt_emne.pdf", width = 5, height = 2)
+
+# Forudsagte værdier for højre- og venstrefløj opdelt efter køn
+plot_model(m4.højre, type = "eff", terms = c("Højreorienteret", "KØN"),
+           title = "Promovering af højrefløjens emner", axis.title = c("", "Forudsagt andel"),
+           grid.breaks =.05, ci.lvl = .95, show.values = T) +
+  # grid.breaks og show.values virker ikke. 
+  theme_sjplot(base_size = 12) + coord_flip() +
+  labs (caption = "Note: 95 % konfidensinterval markeret")
+ggsave("kvinde_floj_emne.pdf", width = 5, height = 2)
 
 
 # TIL LATEX
